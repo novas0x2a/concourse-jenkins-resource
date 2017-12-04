@@ -1,4 +1,12 @@
+NAME := novas0x2a/concourse-jenkins-resource
+VERSION := $$(git describe --always)
+
 build:
-	docker build -t novas0x2a/concourse-jenkins-resource:$$(git describe --always) .
+	docker build -t $(NAME):$(VERSION) .
+
+push:
+	docker tag $(NAME):$(VERSION) $(NAME):latest
+	docker push $(NAME):$(VERSION)
+	docker push $(NAME):latest
 
 .PHONY: *
