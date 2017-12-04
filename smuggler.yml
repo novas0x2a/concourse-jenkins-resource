@@ -30,7 +30,7 @@ commands:
 
       printf 'build_id=%s\n' ${SMUGGLER_VERSION_ID}                    >> ${SMUGGLER_OUTPUT_DIR}/metadata
       printf 'url=%s\n'      $(cat ${SMUGGLER_DESTINATION_DIR}/url)    >> ${SMUGGLER_OUTPUT_DIR}/metadata
-      printf 'result=%s\n'   $(cat ${SMUGGLER_DESTINATION_DIR}/result) >> ${SMUGGLER_OUTPUT_DIR}/result
+      printf 'result=%s\n'   $(cat ${SMUGGLER_DESTINATION_DIR}/result) >> ${SMUGGLER_OUTPUT_DIR}/metadata
 
       if [[ -z "${SMUGGLER_requireResult:-}" ]]; then
         echo "OK!" >&2
