@@ -4,26 +4,33 @@ commands:
     set -e
     set +x
     echo "machine ${SMUGGLER_host} login ${SMUGGLER_user} password ${SMUGGLER_pass}" > ~/.netrc
-    set -x
 
-    curl --max-time 10 --retry 3 -n "https://${SMUGGLER_host}${SMUGGLER_job}/api/json" > "${SMUGGLER_OUTPUT_DIR}/raw"
+    job_url="https://${SMUGGLER_host}${SMUGGLER_job}"
+
+    set -x
+    curl -sS --max-time 10 --retry 3 -n "${job_url}/api/json" > "${SMUGGLER_OUTPUT_DIR}/raw"
+    set +x
+
     jq '.builds | .[].number' < "${SMUGGLER_OUTPUT_DIR}/raw" | tac > "${SMUGGLER_OUTPUT_DIR}/versions"
 
   in: |
     set -e
     set +x
     echo "machine ${SMUGGLER_host} login ${SMUGGLER_user} password ${SMUGGLER_pass}" > ~/.netrc
-    set -x
+
+    job_url="https://${SMUGGLER_host}${SMUGGLER_job}"
 
     while true; do
-      curl --max-time 10 --retry 3 -n "https://${SMUGGLER_host}${SMUGGLER_job}/${SMUGGLER_VERSION_ID}/api/json" > "${SMUGGLER_DESTINATION_DIR}/raw"
+      set -x
+      curl -sS --max-time 10 --retry 3 -n "${job_url}/${SMUGGLER_VERSION_ID}/api/json" > "${SMUGGLER_DESTINATION_DIR}/raw"
+      set +x
 
-      jq -r '.result' < "${SMUGGLER_DESTINATION_DIR}/raw" > ${SMUGGLER_DESTINATION_DIR}/result
-      jq -r '.url'    < "${SMUGGLER_DESTINATION_DIR}/raw" > ${SMUGGLER_DESTINATION_DIR}/url
+      jq -r '.result' < "${SMUGGLER_DESTINATION_DIR}/raw" > "${SMUGGLER_DESTINATION_DIR}"/result
+      jq -r '.url'    < "${SMUGGLER_DESTINATION_DIR}/raw" > "${SMUGGLER_DESTINATION_DIR}"/url
 
       time_ms=$(jq -r '.timestamp' <  "${SMUGGLER_DESTINATION_DIR}/raw")
-      echo ${time_ms}     > ${SMUGGLER_DESTINATION_DIR}/start_time_ms
-      echo ${time_ms%???} > ${SMUGGLER_DESTINATION_DIR}/start_time_s
+      echo "${time_ms}"     > "${SMUGGLER_DESTINATION_DIR}"/start_time_ms
+      echo "${time_ms%???}" > "${SMUGGLER_DESTINATION_DIR}"/start_time_s
 
       printf 'date='                                                   > ${SMUGGLER_OUTPUT_DIR}/metadata
       date -d @"$(cat ${SMUGGLER_DESTINATION_DIR}/start_time_s)"       >> ${SMUGGLER_OUTPUT_DIR}/metadata
@@ -33,16 +40,16 @@ commands:
       printf 'result=%s\n'   $(cat ${SMUGGLER_DESTINATION_DIR}/result) >> ${SMUGGLER_OUTPUT_DIR}/metadata
 
       if [[ -z "${SMUGGLER_requireResult:-}" ]]; then
-        echo "OK!" >&2
+        echo "Don't care about the result, so all done!" >&2
         break
       elif [[ "$(cat ${SMUGGLER_DESTINATION_DIR}/result)" == "null" ]]; then
-        echo "Still thinking..." >&2
-        sleep 5
+        echo "Waiting for build..." >&2
+        sleep 10
       elif [[ "$(cat ${SMUGGLER_DESTINATION_DIR}/result)" == "${SMUGGLER_requireResult}" ]]; then
-        echo "OK!" >&2
+        echo "Got the result we were looking for (${SMUGGLER_requireResult}), all done!" >&2
         break
       else
-        echo "Wrong result :|" >&2
+        echo "Wrong result, wanted ${SMUGGLER_requireResult} and got $(cat ${SMUGGLER_DESTINATION_DIR}/result)" >&2
         exit 1
       fi
     done
@@ -54,21 +61,31 @@ commands:
     echo "machine ${SMUGGLER_host} login ${SMUGGLER_user} password ${SMUGGLER_pass}" > ~/.netrc
     set -x
 
+    job_url="https://${SMUGGLER_host}${SMUGGLER_job}"
+
     if [[ -n "${SMUGGLER_buildParams:-}" ]]; then
-      curl -X POST -D headers --max-time 10 --retry 3 -n "https://${SMUGGLER_host}${SMUGGLER_job}/buildWithParameters" -d "${SMUGGLER_buildParams}"
+      set -x
+      curl -sS -X POST -D headers --max-time 10 --retry 3 -n "${job_url}/buildWithParameters" -d "${SMUGGLER_buildParams}"
+      set +x
     else
-      curl -X POST -D headers --max-time 10 --retry 3 -n "https://${SMUGGLER_host}${SMUGGLER_job}/build"
+      set -x
+      curl -sS -X POST -D headers --max-time 10 --retry 3 -n "${job_url}/build"
+      set +x
     fi
 
     queue=$(grep '^Location: ' headers | cut -d ' ' -f 2- | sed -e 's/[[:space:]]*$//')
 
     n=0
     until [[ $n -ge 20 ]]; do
-      jobid=$(curl --max-time 10 --retry 3 -n "${queue}/api/json" | jq '.executable.number')
+      set -x
+      jobid=$(curl -sS --max-time 10 --retry 3 -n "${queue}/api/json" | jq '.executable.number')
+      set +x
+
       if [[ "${jobid}" == "null" ]]; then
-        echo "Build is not scheduled yet" >&2
+        echo "Build is not scheduled yet ${n}/20" >&2
         sleep 3
       else
+        echo "Build scheduled, jobid ${jobid}" >&2
         echo "${jobid}" > "${SMUGGLER_OUTPUT_DIR}/versions"
         break
       fi
